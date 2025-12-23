@@ -1,0 +1,66 @@
+services:
+  mongo:
+    image: mongo:7.0-alpine
+    container_name: rn_todo_mongo_prod
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
+      MONGO_INITDB_DATABASE: rn_todo
+    volumes:
+      - mongo_data_prod:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - rn_todo_network_prod
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile.prod  # Production dockerfile
+    container_name: rn_todo_api_prod
+    ports:
+      - '4000:4000'
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://${MONGO_USERNAME:-root}:${MONGO_PASSWORD:-password}@mongo:27017/rn_todo?authSource=admin
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://yourdomain.com}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - rn_todo_network_prod
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: rn_todo_nginx
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+    networks:
+      - rn_todo_network_prod
+    restart: unless-stopped
+
+volumes:
+  mongo_data_prod:
+    driver: local
+
+networks:
+  rn_todo_network_prod:
+    driver: bridge
+    name: rn_todo_network_prod 

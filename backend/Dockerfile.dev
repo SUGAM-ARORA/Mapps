@@ -1,0 +1,32 @@
+FROM node:21-alpine
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache curl dumb-init
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev)
+RUN npm install
+
+# Copy source files
+COPY . .
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodeapp -u 1001 -G nodejs && \
+    chown -R nodeapp:nodejs /app
+
+USER nodeapp
+
+# Expose port
+EXPOSE 4000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:4000/health || exit 1
+
+# Start development server with hot reload
+CMD ["dumb-init", "npm", "run", "dev"]

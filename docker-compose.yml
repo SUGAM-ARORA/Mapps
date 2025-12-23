@@ -1,0 +1,74 @@
+services:
+  mongo:
+    image: mongo:6.0  # Using a more stable version
+    container_name: rn_todo_mongo
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: rn_todo
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - rn_todo_network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: rn_todo_api
+    ports:
+      - '4000:4000'
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      MONGODB_URI: mongodb://root:password@mongo:27017/rn_todo?authSource=admin
+      JWT_SECRET: 62b113522821beda1ec222f367aa859e
+      CORS_ORIGIN: '*'
+      LOG_LEVEL: debug
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src:cached
+      - ./backend/package.json:/app/package.json:ro
+      - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      - /app/node_modules
+    networks:
+      - rn_todo_network
+    restart: unless-stopped
+
+  mongo-express:
+    image: mongo-express:0.54  # Using specific version
+    container_name: rn_todo_mongo_express
+    ports:
+      - '8081:8081'
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://root:password@mongo:27017/?authSource=admin
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: password
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - rn_todo_network
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+    driver: local
+
+networks:
+  rn_todo_network:
+    driver: bridge
+    name: rn_todo_network
